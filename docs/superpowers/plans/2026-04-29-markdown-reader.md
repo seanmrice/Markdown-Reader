@@ -63,15 +63,27 @@ The template creates a `markdown-reader/` subdirectory. Move its contents up to 
 
 ```bash
 cd "/Users/sean/Library/Mobile Documents/com~apple~CloudDocs/Markdown Reader"
-cp -r markdown-reader/* markdown-reader/.* . 2>/dev/null || true
-rm -rf markdown-reader
+rsync -a markdown-reader/ . && rm -rf markdown-reader
 ```
 
 - [ ] **Step 3: Install React and additional dependencies**
 
 ```bash
 pnpm add react react-dom react-markdown remark-gfm shiki react-shiki electron-store font-list
-pnpm add -D @types/react @types/react-dom
+pnpm add -D @types/react @types/react-dom @vitejs/plugin-react hast
+```
+
+- [ ] **Step 3b: Update Vite renderer config for React**
+
+Update `vite.renderer.config.ts`:
+
+```typescript
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+});
 ```
 
 - [ ] **Step 4: Verify the app starts**
@@ -189,7 +201,7 @@ import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import Store from 'electron-store';
-import fontList from 'font-list';
+import { getFonts } from 'font-list';
 import type { FileTreeNode, Preferences, FolderHistoryEntry } from './types';
 
 const store = new Store<{
@@ -211,7 +223,12 @@ const MAX_HISTORY = 10;
 
 async function scanDirectory(dirPath: string): Promise<FileTreeNode> {
   const name = path.basename(dirPath);
-  const entries = await fs.readdir(dirPath, { withFileTypes: true });
+  let entries;
+  try {
+    entries = await fs.readdir(dirPath, { withFileTypes: true });
+  } catch {
+    return { name, path: dirPath, type: 'directory', children: [] };
+  }
   const children: FileTreeNode[] = [];
 
   const sorted = entries.sort((a, b) => {
@@ -280,8 +297,8 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('get-system-fonts', async () => {
-    const fonts = await fontList.getFonts();
-    return fonts.map((f: string) => f.replace(/^"(.*)"$/, '$1')).sort();
+    const fonts = await getFonts();
+    return fonts.map((f) => f.replace(/^"(.*)"$/, '$1')).sort();
   });
 
   ipcMain.handle('check-path-exists', async (_event, folderPath: string) => {
@@ -318,7 +335,15 @@ app.on('ready', () => {
 });
 
 app.on('window-all-closed', () => {
-  app.quit();
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
+
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow();
+  }
 });
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string;
@@ -622,27 +647,35 @@ export default function App() {
   const updatePreferences = useCallback((update: Partial<Preferences>) => {
     setPreferences((prev) => {
       const next = { ...prev, ...update };
-      window.api.savePreferences(next);
+      window.api.savePreferences(next).catch(console.error);
       return next;
     });
   }, []);
 
   const openFolder = useCallback(async (folderPath?: string) => {
-    const target = folderPath ?? (await window.api.openFolder());
-    if (!target) return;
+    try {
+      const target = folderPath ?? (await window.api.openFolder());
+      if (!target) return;
 
-    const tree = await window.api.readDirectory(target);
-    setFileTree(tree);
-    setCurrentFolderName(tree.name);
-    setCurrentFile(null);
-    setFileContent('');
-    await window.api.addFolderToHistory(target);
+      const tree = await window.api.readDirectory(target);
+      setFileTree(tree);
+      setCurrentFolderName(tree.name);
+      setCurrentFile(null);
+      setFileContent('');
+      await window.api.addFolderToHistory(target);
+    } catch (err) {
+      console.error('Failed to open folder:', err);
+    }
   }, []);
 
   const selectFile = useCallback(async (filePath: string) => {
-    const content = await window.api.readFile(filePath);
-    setCurrentFile(filePath);
-    setFileContent(content);
+    try {
+      const content = await window.api.readFile(filePath);
+      setCurrentFile(filePath);
+      setFileContent(content);
+    } catch (err) {
+      console.error('Failed to read file:', err);
+    }
   }, []);
 
   const fontStyle = preferences.fontFamily !== 'System Default'
@@ -717,11 +750,12 @@ interface WelcomeScreenProps {
 
 export default function WelcomeScreen({ onOpenFolder }: WelcomeScreenProps) {
   const [history, setHistory] = useState<FolderHistoryEntry[]>([]);
-  const [existsMap, setExistsMap] = useState<Record<string, boolean>>({});
+  const [existsMap, setExistsMap] = useState<Record<string, boolean | null>>({});
 
   useEffect(() => {
     window.api.getFolderHistory().then(async (entries) => {
       setHistory(entries);
+      setExistsMap(Object.fromEntries(entries.map((e) => [e.path, null])));
       const checks: Record<string, boolean> = {};
       await Promise.all(
         entries.map(async (e) => {
@@ -784,19 +818,21 @@ export default function WelcomeScreen({ onOpenFolder }: WelcomeScreenProps) {
             overflow: 'hidden',
           }}>
             {history.map((entry, i) => {
-              const exists = existsMap[entry.path] !== false;
+              const checked = existsMap[entry.path];
+              const isLoading = checked === null || checked === undefined;
+              const exists = checked === true;
               return (
                 <button
                   key={entry.path}
                   onClick={() => exists && onOpenFolder(entry.path)}
-                  disabled={!exists}
+                  disabled={!exists || isLoading}
                   style={{
                     display: 'block',
                     width: '100%',
                     padding: '10px 14px',
                     textAlign: 'left',
                     borderBottom: i < history.length - 1 ? '1px solid var(--border-light)' : 'none',
-                    opacity: exists ? 1 : 0.4,
+                    opacity: isLoading ? 0.6 : exists ? 1 : 0.4,
                     cursor: exists ? 'pointer' : 'default',
                     backgroundColor: 'transparent',
                   }}
@@ -1289,17 +1325,22 @@ Create `src/renderer/components/CodeBlock.tsx`:
 
 ```tsx
 import { ShikiHighlighter, isInlineCode } from 'react-shiki';
+import type { Element } from 'hast';
 import type { ThemeMode } from '../../types';
 
 interface CodeBlockProps {
   children?: React.ReactNode;
   className?: string;
-  node?: import('hast').Element;
+  node?: Element;
   theme: ThemeMode;
 }
 
-function resolveShikiTheme(theme: ThemeMode): { light: string; dark: string } {
-  return { light: 'github-light', dark: 'github-dark' };
+const SHIKI_THEME = { light: 'github-light', dark: 'github-dark' };
+
+function getDefaultColor(theme: ThemeMode): string {
+  if (theme === 'light') return 'light';
+  if (theme === 'dark') return 'dark';
+  return 'light-dark()';
 }
 
 export default function CodeBlock({ children, className, node, theme }: CodeBlockProps) {
@@ -1320,16 +1361,12 @@ export default function CodeBlock({ children, className, node, theme }: CodeBloc
 
   const language = className?.replace('language-', '') ?? '';
   const code = String(children).replace(/\n$/, '');
-  const isDark =
-    theme === 'dark' ||
-    (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-
-  const themes = resolveShikiTheme(theme);
 
   return (
     <ShikiHighlighter
       language={language}
-      theme={isDark ? themes.dark : themes.light}
+      theme={SHIKI_THEME}
+      defaultColor={getDefaultColor(theme)}
     >
       {code}
     </ShikiHighlighter>
@@ -1426,6 +1463,8 @@ Create `entitlements.plist` in the project root:
   <true/>
   <key>com.apple.security.files.user-selected.read-only</key>
   <true/>
+  <key>com.apple.security.files.bookmarks.app-scope</key>
+  <true/>
 </dict>
 </plist>
 ```
@@ -1449,12 +1488,13 @@ const config: ForgeConfig = {
         entitlements: './entitlements.plist',
       }),
     },
-    osxNotarize: {
-      // Fill in before distribution:
-      // appleId: process.env.APPLE_ID,
-      // appleIdPassword: process.env.APPLE_ID_PASSWORD,
-      // teamId: process.env.APPLE_TEAM_ID,
-    },
+    ...(process.env.APPLE_ID && {
+      osxNotarize: {
+        appleId: process.env.APPLE_ID,
+        appleIdPassword: process.env.APPLE_ID_PASSWORD!,
+        teamId: process.env.APPLE_TEAM_ID!,
+      },
+    }),
   },
   makers: [
     new MakerDMG({
@@ -1499,32 +1539,13 @@ git commit -m "feat: add macOS entitlements and Forge signing config"
 
 **Files:**
 - Remove: any template boilerplate files (e.g., default CSS, template renderer files)
-- Modify: any Vite config adjustments needed for React JSX
+- Modify: `.gitignore`
 
 - [ ] **Step 1: Remove scaffolded template files that are no longer needed**
 
 Delete the default template renderer files that were replaced by our React components (e.g., `src/renderer/index.css`, `src/renderer/renderer.ts`, or any other template defaults).
 
-- [ ] **Step 2: Update Vite renderer config for React**
-
-Install the Vite React plugin and update `vite.renderer.config.ts`:
-
-```bash
-pnpm add -D @vitejs/plugin-react
-```
-
-Update `vite.renderer.config.ts`:
-
-```typescript
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-
-export default defineConfig({
-  plugins: [react()],
-});
-```
-
-- [ ] **Step 3: Add .gitignore entries**
+- [ ] **Step 2: Add .gitignore entries**
 
 Ensure `.gitignore` includes:
 
@@ -1537,7 +1558,7 @@ dist/
 .DS_Store
 ```
 
-- [ ] **Step 4: Verify the full app starts and runs**
+- [ ] **Step 3: Verify the full app starts and runs**
 
 ```bash
 pnpm start
@@ -1545,7 +1566,7 @@ pnpm start
 
 Expected: App opens, shows welcome screen. Clicking "Open Folder" opens native picker. Selecting a folder with `.md` files shows the file tree. Clicking a file renders the markdown. Customize panel adjusts font/size/theme in real time.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add -A
@@ -1574,5 +1595,6 @@ git commit -m "feat: clean up template and finalize integration"
 - `@vitejs/plugin-react`
 - `@types/react`
 - `@types/react-dom`
+- `hast`
 - `typescript`
 - `vite`

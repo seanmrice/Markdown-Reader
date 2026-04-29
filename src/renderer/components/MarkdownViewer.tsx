@@ -1,14 +1,17 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import CodeBlock from './CodeBlock';
-import type { ThemeMode } from '../../types';
+import type { ResolvedTheme } from '../hooks/useTheme';
 
 interface MarkdownViewerProps {
   content: string;
-  theme: ThemeMode;
+  theme: ResolvedTheme;
+  currentFilePath: string | null;
+  onNavigate: (filePath: string) => void;
+  onNavigateFolder: (folderPath: string) => void;
 }
 
-export default function MarkdownViewer({ content, theme }: MarkdownViewerProps) {
+export default function MarkdownViewer({ content, theme, currentFilePath, onNavigate, onNavigateFolder }: MarkdownViewerProps) {
   return (
     <div
       className="markdown-body"
@@ -18,11 +21,38 @@ export default function MarkdownViewer({ content, theme }: MarkdownViewerProps) 
         remarkPlugins={[remarkGfm]}
         components={{
           code: (props) => <CodeBlock {...props} theme={theme} />,
-          a: ({ children, href, ...rest }) => (
-            <a href={href} target="_blank" rel="noopener noreferrer" {...rest}>
-              {children}
-            </a>
-          ),
+          a: ({ children, href, ...rest }) => {
+            const isExternal = !href || href.startsWith('http') || href.startsWith('#') || href.startsWith('mailto:');
+
+            if (!isExternal && currentFilePath) {
+              const dir = currentFilePath.substring(0, currentFilePath.lastIndexOf('/'));
+              const cleaned = href.replace(/\/$/, '');
+              const isMarkdownFile = cleaned.endsWith('.md');
+
+              return (
+                <a
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (isMarkdownFile) {
+                      onNavigate(`${dir}/${cleaned}`);
+                    } else {
+                      onNavigateFolder(`${dir}/${cleaned}`);
+                    }
+                  }}
+                  {...rest}
+                >
+                  {children}
+                </a>
+              );
+            }
+
+            return (
+              <a href={href} target="_blank" rel="noopener noreferrer" {...rest}>
+                {children}
+              </a>
+            );
+          },
         }}
       >
         {content}
@@ -37,7 +67,8 @@ export default function MarkdownViewer({ content, theme }: MarkdownViewerProps) 
         .markdown-body ul, .markdown-body ol { padding-left: 2em; margin: 0.5em 0; }
         .markdown-body li { margin: 0.25em 0; line-height: 1.6; }
         .markdown-body blockquote { padding: 0 1em; color: var(--blockquote-text); border-left: 4px solid var(--blockquote-border); margin: 0.5em 0; }
-        .markdown-body pre { background-color: var(--bg-code); border-radius: 6px; padding: 16px; overflow-x: auto; margin: 0.5em 0; font-size: 0.9em; }
+        .markdown-body pre { margin: 0.5em 0; font-size: 0.9em; }
+        .markdown-body pre pre { padding: 1.25rem 1.5rem; border-radius: 0.5rem; overflow-x: auto; }
         .markdown-body img { max-width: 100%; border-radius: 4px; }
         .markdown-body a { color: var(--link-color); text-decoration: none; }
         .markdown-body a:hover { color: var(--link-hover); text-decoration: underline; }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { FileTreeNode as FileTreeNodeType } from '../../types';
 import FileTree from './FileTree';
 
@@ -10,7 +10,15 @@ interface FileTreeNodeProps {
 }
 
 export default function FileTreeNode({ node, currentFile, onSelectFile, depth }: FileTreeNodeProps) {
-  const [expanded, setExpanded] = useState(true);
+  const containsCurrentFile = node.type === 'directory'
+    && currentFile !== null
+    && currentFile.startsWith(node.path + '/');
+
+  const [expanded, setExpanded] = useState(containsCurrentFile);
+
+  useEffect(() => {
+    if (containsCurrentFile) setExpanded(true);
+  }, [containsCurrentFile]);
   const isActive = node.type === 'file' && node.path === currentFile;
   const paddingLeft = 14 + depth * 16;
 
@@ -42,10 +50,13 @@ export default function FileTreeNode({ node, currentFile, onSelectFile, depth }:
             display: 'inline-block',
             transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
             transition: 'transform 0.15s ease',
+            flexShrink: 0,
           }}>
             {'▶'}
           </span>
-          {node.name}
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {node.name}
+          </span>
         </button>
         {expanded && (
           <FileTree node={node} currentFile={currentFile} onSelectFile={onSelectFile} depth={depth + 1} />

@@ -97,3 +97,5 @@ out/
 # Build artifacts
 dist/
 *.dmg
+.pnpm-store/
+release/

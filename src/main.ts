@@ -33,8 +33,8 @@ async function scanDirectory(dirPath: string): Promise<FileTreeNode> {
   const children: FileTreeNode[] = [];
 
   const sorted = entries.sort((a, b) => {
-    if (a.isDirectory() && !b.isDirectory()) return -1;
-    if (!a.isDirectory() && b.isDirectory()) return 1;
+    if (a.isDirectory() && !b.isDirectory()) return 1;
+    if (!a.isDirectory() && b.isDirectory()) return -1;
     return a.name.localeCompare(b.name);
   });
 
@@ -112,21 +112,28 @@ function registerIpcHandlers() {
   });
 }
 
+const isDev = !app.isPackaged;
+
 const createWindow = () => {
   const mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    show: false,
+    backgroundColor: '#1a1a1a',
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
     },
   });
 
-  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+  mainWindow.once('ready-to-show', () => mainWindow.show());
+
+  if (isDev) {
+    const port = process.env.VITE_DEV_PORT ?? '5173';
+    mainWindow.loadURL(`http://localhost:${port}`);
   } else {
-    mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
+    mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   }
 };
 
@@ -147,5 +154,3 @@ app.on('activate', () => {
   }
 });
 
-declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string;
-declare const MAIN_WINDOW_VITE_NAME: string;

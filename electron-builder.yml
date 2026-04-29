@@ -1,0 +1,39 @@
+appId: com.untasker.markdownreader
+productName: Markdown Reader
+
+directories:
+  output: release
+  buildResources: build-assets
+
+files:
+  - dist/**/*
+  - package.json
+
+asar: true
+asarUnpack:
+  - "**/*.node"
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - arm64
+    - target: zip
+      arch:
+        - arm64
+  category: public.app-category.productivity
+  hardenedRuntime: true
+  gatekeeperAssess: true
+  identity: null
+  entitlements: entitlements.plist
+  entitlementsInherit: entitlements.plist
+
+dmg:
+  title: Markdown Reader ${version}
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications

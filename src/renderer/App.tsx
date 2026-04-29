@@ -5,6 +5,27 @@ import Sidebar from './components/Sidebar';
 import MarkdownViewer from './components/MarkdownViewer';
 import WelcomeScreen from './components/WelcomeScreen';
 
+function findDefaultFile(node: FileTreeNode): string | null {
+  if (node.type === 'file') {
+    return node.name.toLowerCase() === 'readme.md' ? node.path : null;
+  }
+  if (!node.children) return null;
+  for (const child of node.children) {
+    if (child.type === 'file' && child.name.toLowerCase() === 'readme.md') {
+      return child.path;
+    }
+  }
+  let first: string | null = null;
+  for (const child of node.children) {
+    if (child.type === 'file' && !first) {
+      first = child.path;
+    }
+    const found = findDefaultFile(child);
+    if (found) return found;
+  }
+  return first;
+}
+
 const DEFAULT_PREFERENCES: Preferences = {
   fontFamily: 'System Default',
   fontSize: 16,
@@ -19,7 +40,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [currentFolderName, setCurrentFolderName] = useState<string>('');
 
-  useTheme(preferences.theme);
+  const resolvedTheme = useTheme(preferences.theme);
 
   useEffect(() => {
     window.api.getPreferences().then(setPreferences);
@@ -41,12 +62,27 @@ export default function App() {
       const tree = await window.api.readDirectory(target);
       setFileTree(tree);
       setCurrentFolderName(tree.name);
-      setCurrentFile(null);
-      setFileContent('');
       await window.api.addFolderToHistory(target);
+
+      const defaultFile = findDefaultFile(tree);
+      if (defaultFile) {
+        const content = await window.api.readFile(defaultFile);
+        setCurrentFile(defaultFile);
+        setFileContent(content);
+      } else {
+        setCurrentFile(null);
+        setFileContent('');
+      }
     } catch (err) {
       console.error('Failed to open folder:', err);
     }
+  }, []);
+
+  const closeFolder = useCallback(() => {
+    setFileTree(null);
+    setCurrentFile(null);
+    setFileContent('');
+    setCurrentFolderName('');
   }, []);
 
   const selectFile = useCallback(async (filePath: string) => {
@@ -56,6 +92,20 @@ export default function App() {
       setFileContent(content);
     } catch (err) {
       console.error('Failed to read file:', err);
+    }
+  }, []);
+
+  const navigateToFolder = useCallback(async (folderPath: string) => {
+    try {
+      const tree = await window.api.readDirectory(folderPath);
+      const defaultFile = findDefaultFile(tree);
+      if (defaultFile) {
+        const content = await window.api.readFile(defaultFile);
+        setCurrentFile(defaultFile);
+        setFileContent(content);
+      }
+    } catch {
+      // folder not found — no-op
     }
   }, []);
 
@@ -73,6 +123,7 @@ export default function App() {
           currentFile={currentFile}
           onSelectFile={selectFile}
           onOpenFolder={() => openFolder()}
+          onCloseFolder={closeFolder}
           folderName={currentFolderName}
           preferences={preferences}
           onUpdatePreferences={updatePreferences}
@@ -88,7 +139,13 @@ export default function App() {
       >
         {fileTree ? (
           currentFile ? (
-            <MarkdownViewer content={fileContent} theme={preferences.theme} />
+            <MarkdownViewer
+              content={fileContent}
+              theme={resolvedTheme}
+              currentFilePath={currentFile}
+              onNavigate={selectFile}
+              onNavigateFolder={navigateToFolder}
+            />
           ) : (
             <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-muted)' }}>
               Select a file from the sidebar

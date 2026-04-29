@@ -1,21 +1,15 @@
 import { ShikiHighlighter, isInlineCode } from 'react-shiki';
 import type { Element } from 'hast';
-import type { ThemeMode } from '../../types';
+import type { ResolvedTheme } from '../hooks/useTheme';
 
 interface CodeBlockProps {
   children?: React.ReactNode;
   className?: string;
   node?: Element;
-  theme: ThemeMode;
+  theme: ResolvedTheme;
 }
 
 const SHIKI_THEME = { light: 'github-light', dark: 'github-dark' };
-
-function getDefaultColor(theme: ThemeMode): string {
-  if (theme === 'light') return 'light';
-  if (theme === 'dark') return 'dark';
-  return 'light-dark()';
-}
 
 export default function CodeBlock({ children, className, node, theme }: CodeBlockProps) {
   if (node && isInlineCode(node)) {
@@ -40,7 +34,8 @@ export default function CodeBlock({ children, className, node, theme }: CodeBloc
     <ShikiHighlighter
       language={language}
       theme={SHIKI_THEME}
-      defaultColor={getDefaultColor(theme)}
+      defaultColor={theme}
+      addDefaultStyles
     >
       {code}
     </ShikiHighlighter>

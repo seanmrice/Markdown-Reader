@@ -18,7 +18,7 @@ function getDefaultColor(theme: ThemeMode): string {
 }
 
 export default function CodeBlock({ children, className, node, theme }: CodeBlockProps) {
-  if (isInlineCode(node)) {
+  if (node && isInlineCode(node)) {
     return (
       <code
         style={{

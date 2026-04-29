@@ -2,7 +2,7 @@ appId: com.untasker.markdownreader
 productName: Markdown Reader
 
 directories:
-  output: release
+  output: /tmp/markdown-reader-build
   buildResources: build-assets
 
 files:
@@ -24,9 +24,9 @@ mac:
   category: public.app-category.productivity
   hardenedRuntime: true
   gatekeeperAssess: true
-  identity: null
   entitlements: entitlements.plist
   entitlementsInherit: entitlements.plist
+  notarize: true
 
 dmg:
   title: Markdown Reader ${version}

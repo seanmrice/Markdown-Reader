@@ -99,3 +99,4 @@ dist/
 *.dmg
 .pnpm-store/
 release/
+.DS_Store

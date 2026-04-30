@@ -26,6 +26,7 @@ export interface ElectronAPI {
   savePreferences: (prefs: Preferences) => Promise<void>;
   getFolderHistory: () => Promise<FolderHistoryEntry[]>;
   addFolderToHistory: (folderPath: string) => Promise<void>;
+  reopenFolder: (folderPath: string) => Promise<string>;
   clearFolderHistory: () => Promise<void>;
   getSystemFonts: () => Promise<string[]>;
   checkPathExists: (folderPath: string) => Promise<boolean>;

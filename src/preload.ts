@@ -9,6 +9,7 @@ const api: ElectronAPI = {
   savePreferences: (prefs: Preferences) => ipcRenderer.invoke('save-preferences', prefs),
   getFolderHistory: () => ipcRenderer.invoke('get-folder-history'),
   addFolderToHistory: (folderPath: string) => ipcRenderer.invoke('add-folder-to-history', folderPath),
+  reopenFolder: (folderPath: string) => ipcRenderer.invoke('reopen-folder', folderPath),
   clearFolderHistory: () => ipcRenderer.invoke('clear-folder-history'),
   getSystemFonts: () => ipcRenderer.invoke('get-system-fonts'),
   checkPathExists: (folderPath: string) => ipcRenderer.invoke('check-path-exists', folderPath),

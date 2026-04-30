@@ -75,7 +75,12 @@ export default function App() {
 
   const openFolder = useCallback(async (folderPath?: string) => {
     try {
-      const target = folderPath ?? (await window.api.openFolder());
+      let target: string | null;
+      if (folderPath) {
+        target = await window.api.reopenFolder(folderPath);
+      } else {
+        target = await window.api.openFolder();
+      }
       if (!target) return;
 
       const tree = await window.api.readDirectory(target);

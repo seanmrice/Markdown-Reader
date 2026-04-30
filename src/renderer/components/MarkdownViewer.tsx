@@ -21,8 +21,9 @@ export default function MarkdownViewer({ content, theme, currentFilePath, onNavi
         remarkPlugins={[remarkGfm]}
         components={{
           code: (props) => <CodeBlock {...props} theme={theme} />,
-          a: ({ children, href, ...rest }) => {
-            const isExternal = !href || href.startsWith('http') || href.startsWith('#') || href.startsWith('mailto:');
+          a: ({ children, href, title }) => {
+            const SAFE_EXTERNAL = ['http://', 'https://', '#', 'mailto:'];
+            const isExternal = !href || SAFE_EXTERNAL.some((p) => href.startsWith(p));
 
             if (!isExternal && currentFilePath) {
               const dir = currentFilePath.substring(0, currentFilePath.lastIndexOf('/'));
@@ -32,6 +33,7 @@ export default function MarkdownViewer({ content, theme, currentFilePath, onNavi
               return (
                 <a
                   href="#"
+                  title={title}
                   onClick={(e) => {
                     e.preventDefault();
                     if (isMarkdownFile) {
@@ -40,7 +42,6 @@ export default function MarkdownViewer({ content, theme, currentFilePath, onNavi
                       onNavigateFolder(`${dir}/${cleaned}`);
                     }
                   }}
-                  {...rest}
                 >
                   {children}
                 </a>
@@ -48,7 +49,7 @@ export default function MarkdownViewer({ content, theme, currentFilePath, onNavi
             }
 
             return (
-              <a href={href} target="_blank" rel="noopener noreferrer" {...rest}>
+              <a href={href} title={title} target="_blank" rel="noopener noreferrer">
                 {children}
               </a>
             );

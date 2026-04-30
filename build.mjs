@@ -8,12 +8,14 @@ const distDir = path.resolve(here, "dist");
 
 await rm(distDir, { recursive: true, force: true });
 
+const isProd = process.env.NODE_ENV === "production";
+
 const shared = {
   platform: "node",
   target: "node22",
   format: "cjs",
   bundle: true,
-  sourcemap: "linked",
+  sourcemap: isProd ? false : "linked",
   logLevel: "info",
   external: ["electron", "electron-updater", "font-list"],
 };

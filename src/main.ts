@@ -3,6 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import Store from 'electron-store';
 import { getFonts } from 'font-list';
+import { autoUpdater } from 'electron-updater';
 import type { FileTreeNode, Preferences, FolderHistoryEntry } from './types';
 
 const store = new Store<{
@@ -113,9 +114,26 @@ function registerIpcHandlers() {
 }
 
 const isDev = !app.isPackaged;
+let mainWindow: BrowserWindow | null = null;
+let pendingFilePath: string | null = null;
+
+function sendOpenFile(filePath: string) {
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('open-file', filePath);
+  } else {
+    pendingFilePath = filePath;
+  }
+}
+
+app.on('open-file', (event, filePath) => {
+  event.preventDefault();
+  if (filePath.endsWith('.md') || filePath.endsWith('.markdown')) {
+    sendOpenFile(filePath);
+  }
+});
 
 const createWindow = () => {
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     show: false,
@@ -127,7 +145,13 @@ const createWindow = () => {
     },
   });
 
-  mainWindow.once('ready-to-show', () => mainWindow.show());
+  mainWindow.once('ready-to-show', () => {
+    mainWindow!.show();
+    if (pendingFilePath) {
+      mainWindow!.webContents.send('open-file', pendingFilePath);
+      pendingFilePath = null;
+    }
+  });
 
   if (isDev) {
     const port = process.env.VITE_DEV_PORT ?? '5173';
@@ -137,9 +161,17 @@ const createWindow = () => {
   }
 };
 
+function initAutoUpdater() {
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.checkForUpdates().catch(() => {});
+  setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 60 * 60 * 1000);
+}
+
 app.on('ready', () => {
   registerIpcHandlers();
   createWindow();
+  if (!isDev) initAutoUpdater();
 });
 
 app.on('window-all-closed', () => {

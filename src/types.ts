@@ -29,6 +29,7 @@ export interface ElectronAPI {
   clearFolderHistory: () => Promise<void>;
   getSystemFonts: () => Promise<string[]>;
   checkPathExists: (folderPath: string) => Promise<boolean>;
+  onOpenFile: (callback: (filePath: string) => void) => () => void;
 }
 
 declare global {

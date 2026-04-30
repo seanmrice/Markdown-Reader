@@ -46,6 +46,25 @@ export default function App() {
     window.api.getPreferences().then(setPreferences);
   }, []);
 
+  const openFile = useCallback(async (filePath: string) => {
+    try {
+      const dir = filePath.substring(0, filePath.lastIndexOf('/'));
+      const tree = await window.api.readDirectory(dir);
+      setFileTree(tree);
+      setCurrentFolderName(tree.name);
+      await window.api.addFolderToHistory(dir);
+      const content = await window.api.readFile(filePath);
+      setCurrentFile(filePath);
+      setFileContent(content);
+    } catch (err) {
+      console.error('Failed to open file:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    return window.api.onOpenFile(openFile);
+  }, [openFile]);
+
   const updatePreferences = useCallback((update: Partial<Preferences>) => {
     setPreferences((prev) => {
       const next = { ...prev, ...update };

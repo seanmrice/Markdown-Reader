@@ -2,16 +2,32 @@ appId: com.untasker.markdownreader
 productName: Markdown Reader
 
 directories:
-  output: /tmp/markdown-reader-build
+  output: /var/tmp/markdown-reader-build
   buildResources: build-assets
 
 files:
   - dist/**/*
   - package.json
 
+afterPack: ./scripts/strip-xattrs.js
+
 asar: true
 asarUnpack:
   - "**/*.node"
+
+fileAssociations:
+  - ext: md
+    name: Markdown Document
+    role: Viewer
+    mimeType: text/markdown
+  - ext: markdown
+    name: Markdown Document
+    role: Viewer
+    mimeType: text/markdown
+
+publish:
+  provider: generic
+  url: https://software.untasker.com/releases/
 
 mac:
   target:
@@ -23,7 +39,6 @@ mac:
         - arm64
   category: public.app-category.productivity
   hardenedRuntime: true
-  gatekeeperAssess: true
   entitlements: entitlements.plist
   entitlementsInherit: entitlements.plist
   notarize: true

@@ -15,7 +15,7 @@ const shared = {
   bundle: true,
   sourcemap: "linked",
   logLevel: "info",
-  external: ["electron", "font-list"],
+  external: ["electron", "electron-updater", "font-list"],
 };
 
 await Promise.all([

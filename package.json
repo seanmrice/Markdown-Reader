@@ -1,7 +1,7 @@
 {
   "name": "markdown-reader",
   "productName": "Markdown Reader",
-  "version": "1.0.0",
+  "version": "1.1.1",
   "description": "A clean, read-only markdown viewer for macOS.",
   "main": "dist/main.cjs",
   "private": true,
@@ -10,7 +10,7 @@
     "build:renderer": "vite build --config vite.renderer.config.ts",
     "build": "pnpm run build:main && pnpm run build:renderer",
     "start": "pnpm run build:main && node dev.mjs",
-    "dist:mac": "pnpm run build && electron-builder --mac --config electron-builder.yml",
+    "dist:mac": "pnpm run build && xattr -cr node_modules/electron && electron-builder --mac --config electron-builder.yml",
     "typecheck": "tsc --noEmit"
   },
   "author": {
@@ -36,6 +36,7 @@
   },
   "dependencies": {
     "electron-store": "^11.0.2",
+    "electron-updater": "^6.8.3",
     "font-list": "^2.0.2",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",

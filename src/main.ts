@@ -1,6 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import { watch, type FSWatcher } from 'node:fs';
+import { homedir } from 'node:os';
 import Store from 'electron-store';
 import { getFonts } from 'font-list';
 import { autoUpdater } from 'electron-updater';
@@ -15,6 +17,7 @@ const store = new Store<{
       fontFamily: 'System Default',
       fontSize: 16,
       theme: 'system',
+      customTheme: null,
     },
     folderHistory: [],
   },
@@ -23,6 +26,199 @@ const store = new Store<{
 const HIDDEN_DIRS = new Set(['.git', '.svn', '.hg', 'node_modules', '.DS_Store']);
 const MAX_HISTORY = 10;
 const VALID_THEMES: ThemeMode[] = ['system', 'light', 'dark'];
+
+const THEMES_DIR = path.join(homedir(), 'Documents', 'Markdown-Reader-Themes');
+
+const DEFAULT_THEME_CSS = `/* Markdown Reader — Custom Theme
+ * Override any CSS variables below to customize the appearance.
+ * Variables you omit will use the built-in defaults.
+ * Save this file to see changes applied instantly.
+ *
+ * Light mode uses the :root section.
+ * Dark mode uses the @media and .theme-dark sections.
+ * To make a single-palette theme (same colors in both modes),
+ * set the same values in all three sections.
+ */
+
+/* ── Light Mode ── */
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f5;
+  --bg-sidebar: #f0f0f0;
+  --bg-code: #f6f8fa;
+  --bg-hover: #e8e8e8;
+  --bg-active: #dcdcdc;
+
+  --text-primary: #1a1a1a;
+  --text-secondary: #555555;
+  --text-muted: #888888;
+  --text-code: #1a1a1a;
+
+  --border-color: #d0d0d0;
+  --border-light: #e5e5e5;
+
+  --link-color: #0366d6;
+  --link-hover: #0550ae;
+
+  --accent-color: #0366d6;
+
+  --blockquote-border: #d0d7de;
+  --blockquote-text: #555555;
+
+  --table-border: #d0d7de;
+  --table-row-alt: #f6f8fa;
+
+  --hr-color: #d0d7de;
+
+  --scrollbar-thumb: #c0c0c0;
+  --scrollbar-track: transparent;
+}
+
+/* ── Dark Mode (system preference) ── */
+@media (prefers-color-scheme: dark) {
+  :root:not(.theme-light) {
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #222222;
+    --bg-sidebar: #1e1e1e;
+    --bg-code: #2d2d2d;
+    --bg-hover: #333333;
+    --bg-active: #3a3a3a;
+
+    --text-primary: #e0e0e0;
+    --text-secondary: #aaaaaa;
+    --text-muted: #777777;
+    --text-code: #e0e0e0;
+
+    --border-color: #3a3a3a;
+    --border-light: #2d2d2d;
+
+    --link-color: #58a6ff;
+    --link-hover: #79b8ff;
+
+    --accent-color: #58a6ff;
+
+    --blockquote-border: #3a3a3a;
+    --blockquote-text: #aaaaaa;
+
+    --table-border: #3a3a3a;
+    --table-row-alt: #222222;
+
+    --hr-color: #3a3a3a;
+
+    --scrollbar-thumb: #555555;
+    --scrollbar-track: transparent;
+  }
+}
+
+/* ── Dark Mode (explicit selection) ── */
+.theme-dark {
+  --bg-primary: #1a1a1a;
+  --bg-secondary: #222222;
+  --bg-sidebar: #1e1e1e;
+  --bg-code: #2d2d2d;
+  --bg-hover: #333333;
+  --bg-active: #3a3a3a;
+
+  --text-primary: #e0e0e0;
+  --text-secondary: #aaaaaa;
+  --text-muted: #777777;
+  --text-code: #e0e0e0;
+
+  --border-color: #3a3a3a;
+  --border-light: #2d2d2d;
+
+  --link-color: #58a6ff;
+  --link-hover: #79b8ff;
+
+  --accent-color: #58a6ff;
+
+  --blockquote-border: #3a3a3a;
+  --blockquote-text: #aaaaaa;
+
+  --table-border: #3a3a3a;
+  --table-row-alt: #222222;
+
+  --hr-color: #3a3a3a;
+
+  --scrollbar-thumb: #555555;
+  --scrollbar-track: transparent;
+}
+`;
+
+let themeWatcher: FSWatcher | null = null;
+let watchedThemeName: string | null = null;
+
+async function themeFolderExists(): Promise<boolean> {
+  try {
+    await fs.access(THEMES_DIR);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function listThemeFiles(): Promise<string[]> {
+  try {
+    const entries = await fs.readdir(THEMES_DIR);
+    return entries
+      .filter((f) => f.toLowerCase().endsWith('.css'))
+      .map((f) => f.replace(/\.css$/i, ''))
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+async function readThemeFile(themeName: string): Promise<string | null> {
+  const filePath = path.join(THEMES_DIR, `${themeName}.css`);
+  const resolved = path.resolve(filePath);
+  if (!resolved.startsWith(path.resolve(THEMES_DIR) + path.sep)) return null;
+  try {
+    return await fs.readFile(resolved, 'utf-8');
+  } catch {
+    return null;
+  }
+}
+
+function stopThemeWatcher() {
+  if (themeWatcher) {
+    themeWatcher.close();
+    themeWatcher = null;
+    watchedThemeName = null;
+  }
+}
+
+function broadcastToWindows(channel: string, data: unknown) {
+  for (const win of windows) {
+    if (!win.isDestroyed()) {
+      win.webContents.send(channel, data);
+    }
+  }
+}
+
+function startThemeWatcher(themeName: string) {
+  stopThemeWatcher();
+  watchedThemeName = themeName;
+  const targetFile = `${themeName}.css`;
+
+  try {
+    themeWatcher = watch(THEMES_DIR, async (_eventType, filename) => {
+      if (!filename?.toLowerCase().endsWith('.css')) return;
+
+      const themes = await listThemeFiles();
+      broadcastToWindows('themes-list-changed', themes);
+
+      if (filename !== targetFile) return;
+      const snapshotName = watchedThemeName;
+      const css = await readThemeFile(themeName);
+      if (watchedThemeName !== snapshotName) return;
+
+      broadcastToWindows('theme-css-changed', css);
+    });
+  } catch {
+    // folder may not exist yet
+  }
+}
 
 const allowedRoots = new Set<string>();
 
@@ -119,11 +315,12 @@ function registerIpcHandlers() {
 
   ipcMain.handle('save-preferences', (_event, prefs: unknown) => {
     if (typeof prefs !== 'object' || prefs === null) throw new Error('Invalid preferences');
-    const { fontFamily, fontSize, theme } = prefs as Record<string, unknown>;
+    const { fontFamily, fontSize, theme, customTheme } = prefs as Record<string, unknown>;
     if (typeof fontFamily !== 'string') throw new Error('Invalid fontFamily');
     if (typeof fontSize !== 'number' || fontSize < 8 || fontSize > 72) throw new Error('Invalid fontSize');
     if (!VALID_THEMES.includes(theme as ThemeMode)) throw new Error('Invalid theme');
-    store.set('preferences', { fontFamily, fontSize, theme } as Preferences);
+    if (customTheme !== null && typeof customTheme !== 'string') throw new Error('Invalid customTheme');
+    store.set('preferences', { fontFamily, fontSize, theme, customTheme } as Preferences);
   });
 
   ipcMain.handle('get-folder-history', () => {
@@ -166,6 +363,37 @@ function registerIpcHandlers() {
     } catch {
       return false;
     }
+  });
+
+  ipcMain.handle('get-custom-themes', async () => {
+    if (!(await themeFolderExists())) return null;
+    return listThemeFiles();
+  });
+
+  ipcMain.handle('initialize-themes', async () => {
+    await fs.mkdir(THEMES_DIR, { recursive: true });
+    const defaultPath = path.join(THEMES_DIR, 'Default.css');
+    try {
+      await fs.access(defaultPath);
+    } catch {
+      await fs.writeFile(defaultPath, DEFAULT_THEME_CSS, 'utf-8');
+    }
+    shell.openPath(THEMES_DIR);
+    return listThemeFiles();
+  });
+
+  ipcMain.handle('read-theme-css', async (_event, themeName: string) => {
+    if (typeof themeName !== 'string') throw new Error('Invalid theme name');
+    return readThemeFile(themeName);
+  });
+
+  ipcMain.handle('watch-themes', async (_event, themeName: string) => {
+    if (typeof themeName !== 'string') throw new Error('Invalid theme name');
+    startThemeWatcher(themeName);
+  });
+
+  ipcMain.handle('unwatch-themes', async () => {
+    stopThemeWatcher();
   });
 }
 
@@ -346,6 +574,10 @@ if (!gotLock) {
     buildAppMenu();
     createWindow();
     if (!isDev) initAutoUpdater();
+  });
+
+  app.on('before-quit', () => {
+    stopThemeWatcher();
   });
 
   app.on('window-all-closed', () => {

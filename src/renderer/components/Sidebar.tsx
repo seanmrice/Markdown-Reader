@@ -19,6 +19,8 @@ interface SidebarProps {
   folderName: string;
   preferences: Preferences;
   onUpdatePreferences: (update: Partial<Preferences>) => void;
+  availableThemes: string[] | null;
+  onAvailableThemesChange: (themes: string[] | null) => void;
 }
 
 export default function Sidebar({
@@ -32,6 +34,8 @@ export default function Sidebar({
   folderName,
   preferences,
   onUpdatePreferences,
+  availableThemes,
+  onAvailableThemesChange,
 }: SidebarProps) {
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   const dragging = useRef(false);
@@ -155,7 +159,12 @@ export default function Sidebar({
         <FileTree node={fileTree} currentFile={currentFile} onSelectFile={onSelectFile} depth={0} />
       </div>
 
-      <CustomizePanel preferences={preferences} onUpdatePreferences={onUpdatePreferences} />
+      <CustomizePanel
+        preferences={preferences}
+        onUpdatePreferences={onUpdatePreferences}
+        availableThemes={availableThemes}
+        onAvailableThemesChange={onAvailableThemesChange}
+      />
 
       <div
         ref={handleRef}

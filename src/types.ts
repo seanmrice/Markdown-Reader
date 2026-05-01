@@ -11,6 +11,7 @@ export interface Preferences {
   fontFamily: string;
   fontSize: number;
   theme: ThemeMode;
+  customTheme: string | null;
 }
 
 export interface FolderHistoryEntry {
@@ -32,6 +33,13 @@ export interface ElectronAPI {
   checkPathExists: (folderPath: string) => Promise<boolean>;
   openExternal: (url: string) => Promise<void>;
   onOpenFile: (callback: (filePath: string) => void) => () => void;
+  getCustomThemes: () => Promise<string[] | null>;
+  initializeThemes: () => Promise<string[]>;
+  readThemeCss: (themeName: string) => Promise<string | null>;
+  watchThemes: (themeName: string) => Promise<void>;
+  unwatchThemes: () => Promise<void>;
+  onThemeCssChanged: (callback: (css: string | null) => void) => () => void;
+  onThemesListChanged: (callback: (themes: string[]) => void) => () => void;
 }
 
 declare global {

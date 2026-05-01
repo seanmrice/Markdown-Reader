@@ -30,7 +30,10 @@ const DEFAULT_PREFERENCES: Preferences = {
   fontFamily: 'System Default',
   fontSize: 16,
   theme: 'system',
+  customTheme: null,
 };
+
+const CUSTOM_THEME_STYLE_ID = 'custom-theme-css';
 
 export default function App() {
   const [preferences, setPreferences] = useState<Preferences>(DEFAULT_PREFERENCES);
@@ -40,10 +43,12 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [currentFolderName, setCurrentFolderName] = useState<string>('');
 
+  const [availableThemes, setAvailableThemes] = useState<string[] | null>(null);
   const resolvedTheme = useTheme(preferences.theme);
 
   useEffect(() => {
     window.api.getPreferences().then(setPreferences);
+    window.api.getCustomThemes().then(setAvailableThemes);
   }, []);
 
   const openFile = useCallback(async (filePath: string) => {
@@ -72,6 +77,53 @@ export default function App() {
       return next;
     });
   }, []);
+
+  const applyThemeCss = useCallback((css: string | null) => {
+    let el = document.getElementById(CUSTOM_THEME_STYLE_ID);
+    if (css) {
+      if (!el) {
+        el = document.createElement('style');
+        el.id = CUSTOM_THEME_STYLE_ID;
+        document.head.appendChild(el);
+      }
+      el.textContent = css;
+    } else if (el) {
+      el.remove();
+    }
+  }, []);
+
+  useEffect(() => {
+    const unsub = window.api.onThemesListChanged(setAvailableThemes);
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const themeName = preferences.customTheme;
+    if (!themeName) {
+      applyThemeCss(null);
+      window.api.unwatchThemes();
+      return;
+    }
+    window.api.readThemeCss(themeName).then((css) => {
+      if (css === null) {
+        updatePreferences({ customTheme: null });
+        return;
+      }
+      applyThemeCss(css);
+    });
+    window.api.watchThemes(themeName);
+    const unsub = window.api.onThemeCssChanged((css) => {
+      if (css === null) {
+        updatePreferences({ customTheme: null });
+        return;
+      }
+      applyThemeCss(css);
+    });
+    return () => {
+      unsub();
+      window.api.unwatchThemes();
+    };
+  }, [preferences.customTheme, applyThemeCss, updatePreferences]);
 
   const openFolder = useCallback(async (folderPath?: string) => {
     try {
@@ -151,6 +203,8 @@ export default function App() {
           folderName={currentFolderName}
           preferences={preferences}
           onUpdatePreferences={updatePreferences}
+          availableThemes={availableThemes}
+          onAvailableThemesChange={setAvailableThemes}
         />
       )}
       <main

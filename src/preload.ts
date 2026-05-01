@@ -19,6 +19,21 @@ const api: ElectronAPI = {
     ipcRenderer.on('open-file', listener);
     return () => ipcRenderer.removeListener('open-file', listener);
   },
+  getCustomThemes: () => ipcRenderer.invoke('get-custom-themes'),
+  initializeThemes: () => ipcRenderer.invoke('initialize-themes'),
+  readThemeCss: (themeName: string) => ipcRenderer.invoke('read-theme-css', themeName),
+  watchThemes: (themeName: string) => ipcRenderer.invoke('watch-themes', themeName),
+  unwatchThemes: () => ipcRenderer.invoke('unwatch-themes'),
+  onThemeCssChanged: (callback: (css: string | null) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, css: string | null) => callback(css);
+    ipcRenderer.on('theme-css-changed', listener);
+    return () => ipcRenderer.removeListener('theme-css-changed', listener);
+  },
+  onThemesListChanged: (callback: (themes: string[]) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, themes: string[]) => callback(themes);
+    ipcRenderer.on('themes-list-changed', listener);
+    return () => ipcRenderer.removeListener('themes-list-changed', listener);
+  },
 };
 
 contextBridge.exposeInMainWorld('api', api);

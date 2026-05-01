@@ -4,9 +4,16 @@ import type { Preferences, ThemeMode } from '../../types';
 interface CustomizePanelProps {
   preferences: Preferences;
   onUpdatePreferences: (update: Partial<Preferences>) => void;
+  availableThemes: string[] | null;
+  onAvailableThemesChange: (themes: string[] | null) => void;
 }
 
-export default function CustomizePanel({ preferences, onUpdatePreferences }: CustomizePanelProps) {
+export default function CustomizePanel({
+  preferences,
+  onUpdatePreferences,
+  availableThemes,
+  onAvailableThemesChange,
+}: CustomizePanelProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
 
@@ -21,6 +28,18 @@ export default function CustomizePanel({ preferences, onUpdatePreferences }: Cus
     { value: 'light', label: 'Light' },
     { value: 'dark', label: 'Dark' },
   ];
+
+  const handleInitializeThemes = async () => {
+    const themes = await window.api.initializeThemes();
+    onAvailableThemesChange(themes);
+  };
+
+  const handleThemeSelect = (themeName: string) => {
+    const value = themeName === '' ? null : themeName;
+    onUpdatePreferences({ customTheme: value });
+  };
+
+  const themesInitialized = availableThemes !== null;
 
   return (
     <div style={{ borderTop: '1px solid var(--border-color)' }}>
@@ -56,7 +75,7 @@ export default function CustomizePanel({ preferences, onUpdatePreferences }: Cus
       </button>
 
       {isOpen && (
-        <div style={{ padding: '8px 14px 14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{ padding: '8px 14px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div>
             <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
               Font
@@ -80,51 +99,17 @@ export default function CustomizePanel({ preferences, onUpdatePreferences }: Cus
               Font Size
             </label>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <button
-                onClick={() => onUpdatePreferences({ fontSize: Math.max(10, preferences.fontSize - 1) })}
-                style={{
-                  width: '28px',
-                  height: '28px',
-                  borderRadius: '4px',
-                  border: '1px solid var(--border-color)',
-                  fontSize: '14px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-              >
-                {'−'}
-              </button>
-              <span style={{ fontSize: '13px', minWidth: '32px', textAlign: 'center' }}>
+              <span style={{ fontSize: '12px', minWidth: '28px', flexShrink: 0 }}>
                 {preferences.fontSize}px
               </span>
-              <button
-                onClick={() => onUpdatePreferences({ fontSize: Math.min(32, preferences.fontSize + 1) })}
-                style={{
-                  width: '28px',
-                  height: '28px',
-                  borderRadius: '4px',
-                  border: '1px solid var(--border-color)',
-                  fontSize: '14px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-              >
-                {'+'}
-              </button>
+              <input
+                type="range"
+                min={10}
+                max={32}
+                value={preferences.fontSize}
+                onChange={(e) => onUpdatePreferences({ fontSize: Number(e.target.value) })}
+                style={{ flex: 1, accentColor: 'var(--accent-color)' }}
+              />
             </div>
           </div>
 
@@ -152,6 +137,72 @@ export default function CustomizePanel({ preferences, onUpdatePreferences }: Cus
                 </button>
               ))}
             </div>
+          </div>
+
+          <div>
+            <label style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+              Customize Theme
+            </label>
+            {themesInitialized ? (
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <select
+                  value={preferences.customTheme ?? ''}
+                  onChange={(e) => handleThemeSelect(e.target.value)}
+                  style={{ flex: 1, fontSize: '12px' }}
+                >
+                  <option value="">Default (built-in)</option>
+                  {availableThemes.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleInitializeThemes}
+                  title="Open themes folder"
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '4px',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }}
+                >
+                  {'📂'}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handleInitializeThemes}
+                style={{
+                  width: '100%',
+                  padding: '6px 0',
+                  fontSize: '12px',
+                  borderRadius: '4px',
+                  border: '1px solid var(--border-color)',
+                  backgroundColor: 'transparent',
+                  color: 'var(--text-secondary)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+              >
+                Start
+              </button>
+            )}
           </div>
         </div>
       )}

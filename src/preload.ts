@@ -13,6 +13,7 @@ const api: ElectronAPI = {
   clearFolderHistory: () => ipcRenderer.invoke('clear-folder-history'),
   getSystemFonts: () => ipcRenderer.invoke('get-system-fonts'),
   checkPathExists: (folderPath: string) => ipcRenderer.invoke('check-path-exists', folderPath),
+  openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
   onOpenFile: (callback: (filePath: string) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, filePath: string) => callback(filePath);
     ipcRenderer.on('open-file', listener);

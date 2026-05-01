@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, session } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import Store from 'electron-store';
@@ -79,14 +79,23 @@ async function scanDirectory(dirPath: string): Promise<FileTreeNode> {
 }
 
 function registerIpcHandlers() {
-  ipcMain.handle('open-folder', async () => {
-    const result = await dialog.showOpenDialog({
-      properties: ['openDirectory'],
-    });
+  ipcMain.handle('open-folder', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const options: Electron.OpenDialogOptions = { properties: ['openDirectory'] };
+    const result = win
+      ? await dialog.showOpenDialog(win, options)
+      : await dialog.showOpenDialog(options);
     if (result.canceled || result.filePaths.length === 0) return null;
     const folderPath = result.filePaths[0];
     addAllowedRoot(folderPath);
     return folderPath;
+  });
+
+  ipcMain.handle('open-external', async (_event, url: string) => {
+    if (typeof url !== 'string') throw new Error('Invalid URL');
+    const parsed = new URL(url);
+    if (!ALLOWED_EXTERNAL_PROTOCOLS.has(parsed.protocol)) throw new Error('Protocol not allowed');
+    await shell.openExternal(url);
   });
 
   ipcMain.handle('read-directory', async (_event, dirPath: string) => {
@@ -161,12 +170,15 @@ function registerIpcHandlers() {
 }
 
 const isDev = !app.isPackaged;
-let mainWindow: BrowserWindow | null = null;
+const ALLOWED_EXTERNAL_PROTOCOLS = new Set(['https:', 'http:', 'mailto:', 'ftp:']);
+const windows = new Set<BrowserWindow>();
 let pendingFilePath: string | null = null;
 
 function sendOpenFile(filePath: string) {
-  if (mainWindow && mainWindow.webContents) {
-    mainWindow.webContents.send('open-file', filePath);
+  const focused = BrowserWindow.getFocusedWindow();
+  const target = focused ?? Array.from(windows)[0];
+  if (target && !target.isDestroyed()) {
+    target.webContents.send('open-file', filePath);
   } else {
     pendingFilePath = filePath;
   }
@@ -180,8 +192,8 @@ app.on('open-file', (event, filePath) => {
   }
 });
 
-const createWindow = () => {
-  mainWindow = new BrowserWindow({
+function createWindow(): BrowserWindow {
+  const win = new BrowserWindow({
     width: 1200,
     height: 800,
     show: false,
@@ -194,21 +206,47 @@ const createWindow = () => {
     },
   });
 
-  mainWindow.once('ready-to-show', () => {
-    mainWindow!.show();
+  windows.add(win);
+  win.on('closed', () => windows.delete(win));
+
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const parsed = new URL(url);
+      if (ALLOWED_EXTERNAL_PROTOCOLS.has(parsed.protocol)) {
+        shell.openExternal(url);
+      }
+    } catch { /* invalid URL — ignore */ }
+    return { action: 'deny' };
+  });
+
+  win.webContents.on('will-navigate', (event, url) => {
+    if (isDev && url.startsWith('http://localhost:')) return;
+    event.preventDefault();
+    try {
+      const parsed = new URL(url);
+      if (ALLOWED_EXTERNAL_PROTOCOLS.has(parsed.protocol)) {
+        shell.openExternal(url);
+      }
+    } catch { /* invalid URL — ignore */ }
+  });
+
+  win.once('ready-to-show', () => {
+    win.show();
     if (pendingFilePath) {
-      mainWindow!.webContents.send('open-file', pendingFilePath);
+      win.webContents.send('open-file', pendingFilePath);
       pendingFilePath = null;
     }
   });
 
   if (isDev) {
     const port = process.env.VITE_DEV_PORT ?? '5173';
-    mainWindow.loadURL(`http://localhost:${port}`);
+    win.loadURL(`http://localhost:${port}`);
   } else {
-    mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+    win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   }
-};
+
+  return win;
+}
 
 function initAutoUpdater() {
   autoUpdater.autoDownload = false;
@@ -223,6 +261,7 @@ function initAutoUpdater() {
 }
 
 function installCSP() {
+  if (isDev) return;
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
@@ -233,22 +272,92 @@ function installCSP() {
   });
 }
 
-app.on('ready', () => {
-  installCSP();
-  registerIpcHandlers();
-  createWindow();
-  if (!isDev) initAutoUpdater();
-});
+function buildAppMenu() {
+  const isMac = process.platform === 'darwin';
+  const template: Electron.MenuItemConstructorOptions[] = [
+    ...(isMac ? [{
+      label: app.name,
+      submenu: [
+        { role: 'about' as const },
+        { type: 'separator' as const },
+        { role: 'services' as const },
+        { type: 'separator' as const },
+        { role: 'hide' as const },
+        { role: 'hideOthers' as const },
+        { role: 'unhide' as const },
+        { type: 'separator' as const },
+        { role: 'quit' as const },
+      ],
+    }] : []),
+    {
+      label: 'File',
+      submenu: [
+        { label: 'New Window', accelerator: 'CmdOrCtrl+N', click: () => createWindow() },
+        { type: 'separator' },
+        isMac ? { role: 'close' } : { role: 'quit' },
+      ],
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' }, { role: 'redo' }, { type: 'separator' },
+        { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' },
+      ],
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' }, { role: 'forceReload' }, { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+      ],
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' }, { role: 'zoom' },
+        ...(isMac ? [{ type: 'separator' as const }, { role: 'front' as const }] : []),
+      ],
+    },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
-});
+const gotLock = app.requestSingleInstanceLock();
 
-app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (windows.size > 0) {
+      const win = Array.from(windows)[0];
+      if (win.isMinimized()) win.restore();
+      win.focus();
+    } else {
+      createWindow();
+    }
+  });
+
+  app.on('ready', () => {
+    installCSP();
+    registerIpcHandlers();
+    buildAppMenu();
     createWindow();
-  }
-});
+    if (!isDev) initAutoUpdater();
+  });
+
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+      app.quit();
+    }
+  });
+
+  app.on('activate', () => {
+    if (windows.size === 0) {
+      createWindow();
+    }
+  });
+}
 

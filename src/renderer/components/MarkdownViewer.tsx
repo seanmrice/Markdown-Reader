@@ -22,10 +22,29 @@ export default function MarkdownViewer({ content, theme, currentFilePath, onNavi
         components={{
           code: (props) => <CodeBlock {...props} theme={theme} />,
           a: ({ children, href, title }) => {
-            const SAFE_EXTERNAL = ['http://', 'https://', '#', 'mailto:'];
-            const isExternal = !href || SAFE_EXTERNAL.some((p) => href.startsWith(p));
+            if (!href || href.startsWith('#')) {
+              return <a href={href} title={title}>{children}</a>;
+            }
 
-            if (!isExternal && currentFilePath) {
+            const EXTERNAL_PREFIXES = ['http://', 'https://', 'mailto:', 'ftp://'];
+            const isExternal = EXTERNAL_PREFIXES.some((p) => href.startsWith(p));
+
+            if (isExternal) {
+              return (
+                <a
+                  href="#"
+                  title={title}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    window.api.openExternal(href);
+                  }}
+                >
+                  {children}
+                </a>
+              );
+            }
+
+            if (currentFilePath) {
               const dir = currentFilePath.substring(0, currentFilePath.lastIndexOf('/'));
               const cleaned = href.replace(/\/$/, '');
               const isMarkdownFile = cleaned.endsWith('.md');
@@ -48,11 +67,7 @@ export default function MarkdownViewer({ content, theme, currentFilePath, onNavi
               );
             }
 
-            return (
-              <a href={href} title={title} target="_blank" rel="noopener noreferrer">
-                {children}
-              </a>
-            );
+            return <a href={href} title={title}>{children}</a>;
           },
         }}
       >

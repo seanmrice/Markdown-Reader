@@ -239,7 +239,21 @@ function isMarkdownFile(filePath: string): boolean {
   return lower.endsWith('.md') || lower.endsWith('.markdown');
 }
 
-async function scanDirectory(dirPath: string): Promise<FileTreeNode> {
+const SCAN_MAX_DEPTH = 2;
+
+async function hasVisibleEntries(dirPath: string): Promise<boolean> {
+  try {
+    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+    return entries.some((e) =>
+      !HIDDEN_DIRS.has(e.name) && !e.name.startsWith('.') && !e.isSymbolicLink()
+      && (e.isDirectory() || (e.isFile() && isMarkdownFile(e.name)))
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function scanDirectory(dirPath: string, depth = 0): Promise<FileTreeNode> {
   const name = path.basename(dirPath);
   let entries;
   try {
@@ -262,11 +276,17 @@ async function scanDirectory(dirPath: string): Promise<FileTreeNode> {
     const fullPath = path.join(dirPath, entry.name);
 
     if (entry.isDirectory()) {
-      const subTree = await scanDirectory(fullPath);
-      if (subTree.children && subTree.children.length > 0) {
-        children.push(subTree);
+      if (depth >= SCAN_MAX_DEPTH) {
+        if (await hasVisibleEntries(fullPath)) {
+          children.push({ name: entry.name, path: fullPath, type: 'directory', lazy: true });
+        }
+      } else {
+        const subTree = await scanDirectory(fullPath, depth + 1);
+        if (subTree.children && subTree.children.length > 0) {
+          children.push(subTree);
+        }
       }
-    } else if (entry.isFile() && entry.name.endsWith('.md')) {
+    } else if (entry.isFile() && isMarkdownFile(entry.name)) {
       children.push({ name: entry.name, path: fullPath, type: 'file' });
     }
   }
@@ -300,12 +320,35 @@ function registerIpcHandlers() {
     return scanDirectory(resolved);
   });
 
-  ipcMain.handle('read-file', async (_event, filePath: string) => {
+  ipcMain.handle('expand-directory', async (_event, dirPath: string) => {
+    const resolved = path.resolve(dirPath);
+    if (!isWithinAllowedRoot(resolved)) throw new Error('Access denied');
+    return scanDirectory(resolved);
+  });
+
+  ipcMain.handle('read-file', async (event, filePath: string) => {
     const resolved = path.resolve(filePath);
     if (!isWithinAllowedRoot(resolved)) throw new Error('Access denied');
     if (!isMarkdownFile(resolved)) throw new Error('Not a markdown file');
     const stat = await fs.lstat(resolved);
     if (!stat.isFile()) throw new Error('Not a regular file');
+    const MAX_FILE_SIZE = 10 * 1024 * 1024;
+    if (stat.size > MAX_FILE_SIZE) {
+      const sizeMB = (stat.size / (1024 * 1024)).toFixed(1);
+      const win = BrowserWindow.fromWebContents(event.sender);
+      const dialogOptions: Electron.MessageBoxOptions = {
+        type: 'warning',
+        buttons: ['Cancel', 'Open Anyway'],
+        defaultId: 0,
+        cancelId: 0,
+        title: 'Large File',
+        message: `This file is ${sizeMB} MB. Do you want to open it?`,
+      };
+      const result = win
+        ? await dialog.showMessageBox(win, dialogOptions)
+        : await dialog.showMessageBox(dialogOptions);
+      if (result.response === 0) throw new Error('File too large — user cancelled');
+    }
     return fs.readFile(resolved, 'utf-8');
   });
 
@@ -329,6 +372,7 @@ function registerIpcHandlers() {
 
   ipcMain.handle('add-folder-to-history', (_event, folderPath: string) => {
     if (typeof folderPath !== 'string' || !path.isAbsolute(folderPath)) throw new Error('Invalid path');
+    if (!isWithinAllowedRoot(folderPath)) throw new Error('Access denied');
     const history = store.get('folderHistory');
     const name = path.basename(folderPath);
     const filtered = history.filter((e) => e.path !== folderPath);
@@ -336,8 +380,9 @@ function registerIpcHandlers() {
     store.set('folderHistory', updated);
   });
 
-  ipcMain.handle('reopen-folder', (_event, folderPath: string) => {
+  ipcMain.handle('reopen-folder', async (_event, folderPath: string) => {
     if (typeof folderPath !== 'string' || !path.isAbsolute(folderPath)) throw new Error('Invalid path');
+    if (isWithinAllowedRoot(folderPath)) return folderPath;
     const history = store.get('folderHistory');
     if (!history.some((e) => e.path === folderPath)) throw new Error('Access denied');
     addAllowedRoot(folderPath);
@@ -398,7 +443,7 @@ function registerIpcHandlers() {
 }
 
 const isDev = !app.isPackaged;
-const ALLOWED_EXTERNAL_PROTOCOLS = new Set(['https:', 'http:', 'mailto:', 'ftp:']);
+const ALLOWED_EXTERNAL_PROTOCOLS = new Set(['https:', 'mailto:']);
 const windows = new Set<BrowserWindow>();
 let pendingFilePath: string | null = null;
 

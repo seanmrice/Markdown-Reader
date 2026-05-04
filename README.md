@@ -46,7 +46,7 @@ While most IDEs have a built-in markdown viewer, they usually default to "editor
 
 This is a side-project that I'm choosing to make open source; please be understanding and patient with that in mind.
 
-This project is open source and free to use, modify, and distribute in accordance with the MIT license.  If you would like to contribute, please open a pull request.  For pull requests, please be descriptive, and explain what you are changing and why.  Documentation-based changes are welcome unless they are purely cosmetic or grammatical.  We reserve the right to reject, modify, or ignore any pull request for any reason (though we will do our best to be reasonable).
+This project is open source and free to use, modify, and distribute in accordance with the MIT license.  If you would like to contribute, please open a pull request from the development branch.  For pull requests, please be descriptive, and explain what you are changing and why.  Documentation-based changes are welcome unless they are purely cosmetic or grammatical.  We reserve the right to reject, modify, or ignore any pull request for any reason (though we will do our best to be reasonable).
 
 ## Privacy Policy
 

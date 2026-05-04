@@ -21,6 +21,7 @@ Minimal sandbox profile:
 
 - `com.apple.security.app-sandbox` — required for distribution
 - `com.apple.security.files.user-selected.read-only` — read-only access to user-selected folders via native folder picker
+- `com.apple.security.files.bookmarks.app-scope` — required to persist and re-access user-selected folders across app launches (security-scoped bookmarks)
 
 No network, camera, or full disk access required.
 
@@ -29,9 +30,9 @@ No network, camera, or full disk access required.
 - **Framework:** Electron Forge with Vite bundler
 - **UI:** React + TypeScript
 - **Markdown:** `react-markdown` + `remark-gfm` (GitHub-Flavored Markdown)
-- **Syntax highlighting:** Shiki or equivalent (to be researched at implementation time for best current option)
+- **Syntax highlighting:** Shiki 4.0.2 + react-shiki 0.9.3 (dual-theme support for light/dark switching)
 - **Persistence:** `electron-store` for user preferences and folder history
-- **System fonts:** System font enumeration for font selection
+- **System fonts:** `font-list` 2.0.2 for system font enumeration
 
 ## Architecture
 
@@ -51,15 +52,16 @@ Exposes capabilities to the renderer via a preload script.
 
 Uses `contextBridge` / `ipcRenderer` to expose a typed API on `window.api`:
 
-- `openFolder()` — opens native folder picker, returns selected path
-- `readDirectory(path)` — scans folder recursively, returns tree of `.md` files
+- `openFolder()` — opens native folder picker, returns `string | null` (null if cancelled)
+- `readDirectory(path)` — scans folder recursively, returns tree of `.md` files. Main process validates path is scoped to the currently opened folder.
 - `readFile(path)` — reads a markdown file, returns raw content
 - `getPreferences()` — returns persisted preferences
 - `savePreferences(prefs)` — persists preferences
 - `getFolderHistory()` — returns folder history list
-- `addFolderToHistory(path)` — adds/moves a folder to top of history
+- `addFolderToHistory(path)` — if folder already in history, moves it to position 0; otherwise prepends and trims to 10 entries. Stores a security-scoped bookmark alongside the path.
 - `clearFolderHistory()` — clears history
 - `getSystemFonts()` — returns list of installed system fonts
+- `checkPathExists(path)` — checks if a path exists on disk, returns boolean
 
 No `nodeIntegration` in the renderer — all Node/OS access goes through this bridge.
 
@@ -111,7 +113,7 @@ Same layout plus:
 - "Clear history" option at the bottom of the list
 - Most recently opened folder appears first
 - Capped at 10 entries
-- Folders that no longer exist on disk are greyed out or silently removed on next launch
+- Folders that no longer exist on disk are silently removed from history on next launch
 
 ## State Management
 
@@ -128,7 +130,17 @@ No external state management library — `useState` / `useContext` is sufficient
 ### Persisted State (via `electron-store` in main process)
 
 - `preferences` — font family, font size, theme choice (system/light/dark)
-- `folderHistory` — array of recently opened folder paths (max 10)
+- `folderHistory` — array of `FolderHistoryEntry` objects (max 10), each containing display path/name and a security-scoped bookmark for sandbox re-access
+
+### Shared Types (contract between main and renderer)
+
+Defined in `src/types.ts`, used by both processes:
+
+- `FileTreeNode` — `{ name: string, path: string, type: 'file' | 'directory', children?: FileTreeNode[] }`
+- `Preferences` — `{ fontFamily: string, fontSize: number, theme: ThemeMode }`
+- `ThemeMode` — `'system' | 'light' | 'dark'`
+- `FolderHistoryEntry` — `{ path: string, name: string }`
+- `ElectronAPI` — typed interface for all `window.api` methods
 
 ## Theme System
 
@@ -136,8 +148,8 @@ Three modes: **System** (default), **Light**, **Dark**.
 
 ### Implementation
 
-- CSS custom properties on the root element
-- Theme class on `<body>`: `theme-light`, `theme-dark`, or no class (System mode defers to `prefers-color-scheme` media query)
+- CSS custom properties on `:root` (`<html>` element)
+- Theme class on `<html>`: `theme-light`, `theme-dark`, or no class (System mode defers to `prefers-color-scheme` media query)
 - In System mode, the app listens for OS theme changes and switches automatically
 
 ### Variables
@@ -168,4 +180,4 @@ Light and dark variants of the syntax highlighting theme, switched in tandem wit
 - GitHub-Flavored Markdown (GFM): tables, task lists, strikethrough, fenced code blocks
 - Syntax highlighting with language detection in fenced code blocks
 - Light/dark syntax theme variants matching the app theme
-- Only `.md` files shown in the file tree — all other file types are filtered out
+- Only `.md` files shown in the file tree — `.markdown`, `.mdx`, and all other file types are explicitly excluded

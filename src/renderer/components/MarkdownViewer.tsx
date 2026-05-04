@@ -47,7 +47,8 @@ export default function MarkdownViewer({ content, theme, currentFilePath, onNavi
             if (currentFilePath) {
               const dir = currentFilePath.substring(0, currentFilePath.lastIndexOf('/'));
               const cleaned = href.replace(/\/$/, '');
-              const isMarkdownFile = cleaned.endsWith('.md');
+              const lower = cleaned.toLowerCase();
+              const isMarkdownFile = lower.endsWith('.md') || lower.endsWith('.markdown');
 
               return (
                 <a

@@ -4,6 +4,7 @@ import type { ElectronAPI, Preferences } from './types';
 const api: ElectronAPI = {
   openFolder: () => ipcRenderer.invoke('open-folder'),
   readDirectory: (dirPath: string) => ipcRenderer.invoke('read-directory', dirPath),
+  expandDirectory: (dirPath: string) => ipcRenderer.invoke('expand-directory', dirPath),
   readFile: (filePath: string) => ipcRenderer.invoke('read-file', filePath),
   getPreferences: () => ipcRenderer.invoke('get-preferences'),
   savePreferences: (prefs: Preferences) => ipcRenderer.invoke('save-preferences', prefs),

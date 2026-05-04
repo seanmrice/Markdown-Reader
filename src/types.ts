@@ -3,6 +3,7 @@ export interface FileTreeNode {
   path: string;
   type: 'file' | 'directory';
   children?: FileTreeNode[];
+  lazy?: boolean;
 }
 
 export type ThemeMode = 'system' | 'light' | 'dark';
@@ -22,6 +23,7 @@ export interface FolderHistoryEntry {
 export interface ElectronAPI {
   openFolder: () => Promise<string | null>;
   readDirectory: (dirPath: string) => Promise<FileTreeNode>;
+  expandDirectory: (dirPath: string) => Promise<FileTreeNode>;
   readFile: (filePath: string) => Promise<string>;
   getPreferences: () => Promise<Preferences>;
   savePreferences: (prefs: Preferences) => Promise<void>;

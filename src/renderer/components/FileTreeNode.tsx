@@ -15,6 +15,8 @@ export default function FileTreeNode({ node, currentFile, onSelectFile, depth }:
     && currentFile.startsWith(node.path + '/');
 
   const [expanded, setExpanded] = useState(containsCurrentFile);
+  const [loadedNode, setLoadedNode] = useState<FileTreeNodeType | null>(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (containsCurrentFile) setExpanded(true);
@@ -22,11 +24,26 @@ export default function FileTreeNode({ node, currentFile, onSelectFile, depth }:
   const isActive = node.type === 'file' && node.path === currentFile;
   const paddingLeft = 14 + depth * 16;
 
+  const handleToggle = async () => {
+    if (node.lazy && !loadedNode && !expanded) {
+      setLoading(true);
+      try {
+        const result = await window.api.expandDirectory(node.path);
+        setLoadedNode(result);
+      } catch {
+        // expansion failed — leave collapsed
+      }
+      setLoading(false);
+    }
+    setExpanded((e) => !e);
+  };
+
   if (node.type === 'directory') {
+    const displayNode = loadedNode ?? node;
     return (
       <div>
         <button
-          onClick={() => setExpanded((e) => !e)}
+          onClick={handleToggle}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -57,9 +74,15 @@ export default function FileTreeNode({ node, currentFile, onSelectFile, depth }:
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {node.name}
           </span>
+          {loading && (
+            <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: 'auto' }}>...</span>
+          )}
         </button>
-        {expanded && (
+        {expanded && !node.lazy && (
           <FileTree node={node} currentFile={currentFile} onSelectFile={onSelectFile} depth={depth + 1} />
+        )}
+        {expanded && node.lazy && loadedNode && (
+          <FileTree node={loadedNode} currentFile={currentFile} onSelectFile={onSelectFile} depth={depth + 1} />
         )}
       </div>
     );

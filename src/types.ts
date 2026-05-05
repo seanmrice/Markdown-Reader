@@ -42,6 +42,9 @@ export interface ElectronAPI {
   unwatchThemes: () => Promise<void>;
   onThemeCssChanged: (callback: (css: string | null) => void) => () => void;
   onThemesListChanged: (callback: (themes: string[]) => void) => () => void;
+  reportError: (error: { message: string; stack?: string; type: string }) => Promise<void>;
+  getAnalyticsEnabled: () => Promise<boolean>;
+  setAnalyticsEnabled: (enabled: boolean) => Promise<void>;
 }
 
 declare global {

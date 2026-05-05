@@ -1,7 +1,7 @@
 {
   "name": "markdown-reader",
   "productName": "Markdown Reader",
-  "version": "1.1.7",
+  "version": "1.1.8",
   "description": "A clean, read-only markdown viewer for macOS.",
   "main": "dist/main.cjs",
   "private": true,
@@ -15,7 +15,7 @@
   },
   "author": {
     "name": "Sean Rice",
-    "email": "sean.m.rice@gmail.com"
+    "email": "sean@untasker.com"
   },
   "license": "MIT",
   "pnpm": {
@@ -38,6 +38,7 @@
     "electron-store": "^11.0.2",
     "electron-updater": "^6.8.3",
     "font-list": "^2.0.2",
+    "posthog-node": "^5.33.2",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-markdown": "^10.1.0",

@@ -7,6 +7,7 @@ import Store from 'electron-store';
 import { getFonts } from 'font-list';
 import { autoUpdater } from 'electron-updater';
 import type { FileTreeNode, Preferences, FolderHistoryEntry, ThemeMode } from './types';
+import { initAnalytics, isAnalyticsEnabled, setAnalyticsEnabled, captureAppClosed, captureAppUpdated, captureException, captureRendererCrash, shutdownAnalytics } from './analytics';
 
 const store = new Store<{
   preferences: Preferences;
@@ -398,6 +399,24 @@ function registerIpcHandlers() {
     return fonts.map((f) => f.replace(/^"(.*)"$/, '$1')).sort();
   });
 
+  ipcMain.handle('report-error', (_event, errorData: unknown) => {
+    if (typeof errorData !== 'object' || errorData === null) return;
+    const { message, stack } = errorData as Record<string, unknown>;
+    if (typeof message !== 'string') return;
+    const error = new Error(message);
+    if (typeof stack === 'string') error.stack = stack;
+    captureException(error, 'renderer');
+  });
+
+  ipcMain.handle('get-analytics-enabled', () => {
+    return isAnalyticsEnabled();
+  });
+
+  ipcMain.handle('set-analytics-enabled', async (_event, enabled: unknown) => {
+    if (typeof enabled !== 'boolean') throw new Error('Invalid value');
+    await setAnalyticsEnabled(enabled);
+  });
+
   ipcMain.handle('check-path-exists', async (_event, folderPath: string) => {
     if (typeof folderPath !== 'string' || !path.isAbsolute(folderPath)) return false;
     const history = store.get('folderHistory');
@@ -492,6 +511,10 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' };
   });
 
+  win.webContents.on('render-process-gone', (_event, details) => {
+    captureRendererCrash(details.reason, details.exitCode);
+  });
+
   win.webContents.on('will-navigate', (event, url) => {
     if (isDev && url.startsWith('http://localhost:')) return;
     event.preventDefault();
@@ -527,6 +550,9 @@ function initAutoUpdater() {
   autoUpdater.on('update-available', (info) => {
     console.log('Update available:', info.version);
     autoUpdater.downloadUpdate().catch((err) => console.error('Update download failed:', err));
+  });
+  autoUpdater.on('update-downloaded', (info) => {
+    captureAppUpdated(info.version);
   });
   autoUpdater.on('error', (err) => console.error('Auto-updater error:', err));
   autoUpdater.checkForUpdates().catch((err) => console.error('Update check failed:', err));
@@ -613,16 +639,35 @@ if (!gotLock) {
     }
   });
 
+  process.on('uncaughtException', (error) => {
+    captureException(error, 'main');
+  });
+
+  process.on('unhandledRejection', (reason) => {
+    const error = reason instanceof Error ? reason : new Error(String(reason));
+    captureException(error, 'main');
+  });
+
   app.on('ready', () => {
     installCSP();
     registerIpcHandlers();
     buildAppMenu();
     createWindow();
+    initAnalytics();
     if (!isDev) initAutoUpdater();
   });
 
-  app.on('before-quit', () => {
+  let isShuttingDown = false;
+
+  app.on('before-quit', (event) => {
     stopThemeWatcher();
+    if (isShuttingDown) return;
+    event.preventDefault();
+    captureAppClosed();
+    shutdownAnalytics().finally(() => {
+      isShuttingDown = true;
+      app.quit();
+    });
   });
 
   app.on('window-all-closed', () => {

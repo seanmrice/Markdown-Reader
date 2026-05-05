@@ -35,6 +35,10 @@ const api: ElectronAPI = {
     ipcRenderer.on('themes-list-changed', listener);
     return () => ipcRenderer.removeListener('themes-list-changed', listener);
   },
+  reportError: (error: { message: string; stack?: string; type: string }) =>
+    ipcRenderer.invoke('report-error', error),
+  getAnalyticsEnabled: () => ipcRenderer.invoke('get-analytics-enabled'),
+  setAnalyticsEnabled: (enabled: boolean) => ipcRenderer.invoke('set-analytics-enabled', enabled),
 };
 
 contextBridge.exposeInMainWorld('api', api);

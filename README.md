@@ -50,7 +50,11 @@ This project is open source and free to use, modify, and distribute in accordanc
 
 ## Privacy Policy
 
-This project does not currently collect any data from you, it is a local application that simply reads and displays markdown files.  While I may add some basic analytics in the future (such as application launch count or error reporting), no data will ever be shared or sold, will be entirely non-attributable (no personal information or IP addresses), and will always provide you with the option to opt-out (both at first launch and any time thereafter).  You will also have the ability to build from source with a env flag to disable analytics; and you may fork and strip out any analytics if you so choose.  Any change to this will be clearly documented both here in the README, in the CHANGELOG, and in the release notes.  I will do my best to keep this as transparent as possible.
+This application collects minimal, non-attributable analytics to help improve the product — limited to app lifecycle events (open, close, update) and error reporting. No personal information or IP addresses are stored. All data is routed through a first-party proxy and IP addresses are anonymized and dropped server-side before ingestion. Data will never be shared or sold.
+
+For a complete breakdown of what is collected and how, see [Docs/Analytics.md](Docs/Analytics.md).
+
+You can disable analytics by building from source without the `POSTHOG_API_KEY` and `POSTHOG_HOST` environment variables, or by blocking `ph.untasker.com` in your firewall. You may also fork and strip out any analytics if you choose.
 
 ## Issues
 

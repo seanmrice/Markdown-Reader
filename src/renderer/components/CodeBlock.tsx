@@ -9,10 +9,14 @@ interface CodeBlockProps {
   theme: ResolvedTheme;
 }
 
+// react-shiki >=0.11 bundles its own copy of the hast types, which TS treats as
+// distinct from @types/hast even though they're structurally the same at runtime.
+type ShikiElement = Parameters<typeof isInlineCode>[0];
+
 const SHIKI_THEME = { light: 'github-light', dark: 'github-dark' };
 
 export default function CodeBlock({ children, className, node, theme }: CodeBlockProps) {
-  if (node && isInlineCode(node)) {
+  if (node && isInlineCode(node as unknown as ShikiElement)) {
     return (
       <code
         style={{

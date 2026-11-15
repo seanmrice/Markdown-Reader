@@ -1,0 +1,8 @@
+allowBuilds:
+  electron: true
+  electron-winstaller: false
+  esbuild: true
+
+overrides:
+  # app-builder-lib pins minimatch 10.x (GHSA moderate, fixed in 11.0.1); no upstream release yet
+  minimatch@>=7.0.0 <11.0.1: ^11.0.1
